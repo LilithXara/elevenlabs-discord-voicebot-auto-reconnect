@@ -16,6 +16,8 @@ export class ElevenLabsConversationalAI {
   private currentAudioStream: PassThrough | null;
   private audioBufferQueue: Buffer[];
   private isProcessing: boolean;
+  private reconnectAttempts = 0;
+  private readonly maxReconnectAttempts = 5;
 
   /**
    * Creates an instance of ElevenLabsConversationalAI.
@@ -41,6 +43,7 @@ export class ElevenLabsConversationalAI {
 
       this.socket.on('open', () => {
         logger.info('Successfully connected to ElevenLabs Conversational WebSocket.');
+        this.reconnectAttempts = 0; // Reset reconnect attempts
         resolve();
       });
 
@@ -52,10 +55,25 @@ export class ElevenLabsConversationalAI {
       this.socket.on('close', (code: number, reason: string) => {
         logger.info(`ElevenLabs WebSocket closed with code ${code}. Reason: ${reason}`);
         this.cleanup();
+        this.tryReconnect();
       });
 
       this.socket.on('message', message => this.handleEvent(message));
     });
+  }
+
+  /**
+   * Attempts to reconnect to the WebSocket.
+   * @private
+   */
+  private tryReconnect(): void {
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.reconnectAttempts++;
+      logger.info(`Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+      setTimeout(() => this.connect(), 2000); // Retry after 2 seconds
+    } else {
+      logger.error('Max reconnect attempts reached. Unable to reconnect.');
+    }
   }
 
   /**
